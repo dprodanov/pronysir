@@ -1,0 +1,198 @@
+/**
+Exponeital series solution of the SIR model
+
+(C) 2024 Dimiter Prodanov 
+
+**********************************
+ * @license This library is free software you can redistribute it and/or
+ *      modify it under the terms of the GNU Lesser General Public
+ *      License as published by the Free Software Foundation	 either
+ *      version 2.1 of the License, or (at your option) any later version.
+ *
+ *      This library is distributed in the hope that it will be useful,
+ *      but WITHOUT ANY WARRANTY	 without even the implied warranty of
+ *      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ *       Lesser General Public License for more details.
+ *
+ *      You should have received a copy of the GNU Lesser General Public
+ *      License along with this library	 if not, write to the Free Software
+ *      Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ */
+
+alias(W, lambert_w);
+alias(WW, generalized_lambert_w);
+ 
+ delta(n):=if n=0 then 1 else 0;
+ 
+/**
+Complete exponential Bell polynoimals
+*/ 
+bellpolys(xx,n):=block([M,i,j],
+ if n=0 then return(1),
+ M: genmatrix(lambda([i,j],if j>i then binomial(n-i,j-i)*subvar(xx,j-i+1) 
+				elseif i=j then subvar(xx,1) elseif i-j=1 then -1 else 0),n),
+if _debug=true then print(M),
+determinant(M)
+);
+
+/**
+Complete exponential Bell polynoimals
+*/ 
+bellpolyst(xx,n):=block([M,i,j],
+ if n=0 then return(1),
+ M: genmatrix(lambda([i,j],if j>i then  subvar(xx,j-i+1)/(j-i)! 
+				elseif i=j then subvar(xx,1) elseif i-j=1 then -i+1 else 0),n),
+if _debug=true then print(M),
+determinant(M)
+);
+
+/*
+series solution procedure
+*/
+solvser(lst, cc, k0, ko ):=block([lstsol:[] ,k, sol1, i],
+	n:length(lst),
+	for k:k0 thru n do (
+		/* only linear recurrences are supported*/
+		sol1:first(solve(lst[k], cc[k+ko])),
+		sol1:subst(lstsol, sol1),
+		sol1:factor(sol1),
+		push(sol1, lstsol)
+	),
+	reverse(lstsol)
+);
+
+/*
+series solution procedure
+*/
+solvser1(lst, cc, k0, ko, mvar ):=block([lstsol:[] ,k, sol1, i],
+	n:length(lst),
+	sol1:solve(lst[k0+ko], mvar),
+	display(sol1),
+	lst:subst(sol1, lst),
+	for k:k0 thru n do (
+		/* only linear recurrences are supported*/
+		sol1:first(solve(lst[k], cc[k+ko])),
+		sol1:subst(lstsol, sol1),
+		sol1:factor(sol1),
+		push(sol1, lstsol)
+	),
+	reverse(lstsol)
+);
+
+/*
+Prony series recursion
+*/
+pronreq1( ww, lam, n):=block([c, L1, L2, lstsol:[c[1]=lam]],
+    L1:makelist( B[k]=bellpolys( c, k)-delta(k),k,0,n),
+    L1:expand(L1),
+    L2: ww*makelist(sum((-1)^i*B[i]*c[k-i]* binomial(k-1, i),i,1,k-1)/(k-1), k, 2, n),
+    L2:ratsimp(subst(L1,L2)),
+    L1: makelist(c[k+1]=L2[k], k, n-1),
+    for k:1 thru n-1 do (
+        sol1:subst(lstsol, L1[k]),
+        sol1:factor(sol1),
+        push(sol1, lstsol)
+    ),
+    reverse(lstsol)
+);
+/*
+Prony series recursion
+*/
+pronreq2( ww, lam, n):=block([c, L1, L2, lstsol:[c[1]=lam]],
+    L1:makelist( B[k]=bellpolys( c, k)-delta(k),k,0,n),
+    L1:expand(L1),
+    L2: -ww*makelist(sum((-1)^i*B[i]*c[k-i]* binomial(k-1, i),i,1,k-1)/(k-1), k, 2, n),
+    L2:ratsimp(subst(L1,L2)),
+    L1: makelist(c[k+1]=L2[k], k, n-1),
+    for k:1 thru n-1 do (
+        sol1:subst(lstsol, L1[k]),
+        sol1:factor(sol1),
+        push(sol1, lstsol)
+    ),
+    reverse(lstsol)
+);
+
+
+/**
+simplification of factorials
+*/
+factsimp(expr):=block([ret, letrat:true, nn, dd], 
+	ret: makegamma(expr), ret: apply1(ret, fsimp2), 
+	nn: num(ret),
+	dd: denom(ret),
+	nn: apply1(nn, fsimp3),
+	dd: apply1(dd, fsimp3),
+	ret: makefact (nn/dd)
+);
+
+/**
+Approximations
+
+*/
+
+I(t, im):= im*exp((1-exp(-im *t))/im - t);
+
+R(t, im):=block([Re: -WW(-1, -%e^(-im-1))], 
+	if t>=0 then 
+		W(-Re*%e^(im*%e^((1-%e^(-im*t))/im-t)-Re))-im*%e^((1-%e^(-im*t))/im-t)+Re 
+	else  
+		WW(-1,-Re*%e^(im*%e^((1-%e^(-im*t))/im-t)-Re))-im*%e^((1-%e^(-im*t))/im-t)+Re
+);
+
+S(t, im):=block([I:  im*exp((1-exp(-im *t))/im - t)], 
+	if t>=0 then 
+		 -W(-exp(I- im-1))
+	else     -WW(-1, -exp(I- im-1))
+);
+
+R1(t, im):=block([Re: -WW(-1, -%e^(-im-1)), I:im*exp((1-exp(-im *t))/im - t), ret, numer:true], 
+	if t>=0 then 
+		  ret:Re - I + W (-exp(I-im-1))
+	else  ret:- I + WW (-1, -exp(I-im-1))+Re,
+	ev(ret,numer)
+);
+
+
+
+/**
+Forward Prony series
+*/
+R2(t, im):=block([Re: -WW(-1, -%e^(-im-1)), A, m, l, ret, numer:true], 
+ A: Re + W(-Re*exp(-Re))- log(Re),
+ A:ev(A,numer),
+ l:A,
+    if t>=0 then (
+        m:1-exp(-A),
+        ret:log(Re)+ A -l* exp(-m*t) -l^2/2! /(exp(A)-1)*exp(-2*m*t) +l^3/3! *(exp(A)-2) /(exp(A)-1)^2*exp(-3*m*t)/2
+    ) else (
+        m:exp(-A)-1,
+        ret:log(Re)+ A -l* exp(m*t) -l^2/2! /(exp(A)-1)*exp(2*m*t) +l^3/3! *(exp(A)-2) /(exp(A)-1)^2*exp(3*m*t)/2,
+        max(ret,0)
+    ), ev(ret,numer)
+);
+
+/**
+Backward Prony series
+*/
+R3(t, im):=block([Re: -WW(-1, -%e^(-im-1)), A, m, l], 
+	A: Re - log(Re)  + W(-Re*exp(-Re)),
+	m:Re-1,  l:A,
+	if t<=0 then
+	  ( l* exp(m*t) -l^2/2! *Re/(Re-1)*exp(2*m*t) +l^3/3! *Re*(2*Re -1) /(Re-1)^2/2*exp(3*m*t))
+	else 0
+);
+
+wkern61(y,g,q):=block([  d: q*%e^(-y)+y-q], 
+    if not numberp(y) then 1/d 
+    elseif abs(float(d))>1e-16 then 1/d else 'nan
+);
+
+ilambint62(x, g, im ):=block([ r, u, ret:'nan, fr:-1/g, bb, cc, dd, numer:true],
+    if not numberp(x) then return('ilambint62(x,g, im)),  
+    dd:float(-W(-%e^( -im/g-1.0))), cc: float(-WW(-1,-%e^( -im/g -1.0) )),  
+    if x>0 and x <g*(cc-dd) then ( 
+        bb:cc-im/g -1,  
+        ret:fr*first(quad_qags( float(wkern61(u, g, cc)) , u, bb, x/g,'epsrel=1d-8))
+    ),
+    ret 
+);
